@@ -1,0 +1,42 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { getDb } from "@/lib/db";
+import { verifyPassword } from "@/lib/password";
+import { createSession, SESSION_COOKIE } from "@/lib/session";
+
+interface UserRow {
+  id: string;
+  name: string;
+  email: string;
+  password_hash: string;
+  skill_level: number;
+}
+
+export async function POST(request: NextRequest) {
+  const body = await request.json().catch(() => null);
+  const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+  const password = typeof body?.password === "string" ? body.password : "";
+
+  if (!email || !password) {
+    return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
+  }
+
+  const user = getDb().prepare("SELECT * FROM users WHERE email = ?").get(email) as UserRow | undefined;
+  if (!user || !verifyPassword(password, user.password_hash)) {
+    return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
+  }
+
+  const { token, expiresAt } = createSession(user.id);
+  const response = NextResponse.json({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    skillLevel: user.skill_level,
+  });
+  response.cookies.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    expires: new Date(expiresAt),
+  });
+  return response;
+}
