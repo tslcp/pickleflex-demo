@@ -40,12 +40,6 @@ export interface StandingsRow {
   pointDiff: number;
 }
 
-export interface Division {
-  id: string;
-  label: string;
-  standings: StandingsRow[];
-}
-
 export type TournamentStatus =
   | "registration_open"
   | "scheduled"

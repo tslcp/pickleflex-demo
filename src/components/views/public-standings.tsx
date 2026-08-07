@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { DIVISIONS } from "@/lib/mock-data";
+import { useTournaments } from "@/lib/tournament-context";
+import { computeStandings } from "@/lib/standings";
 
 const RANK_BADGE: Record<number, string> = {
   1: "bg-amber-100 text-amber-600",
@@ -11,8 +12,25 @@ const RANK_BADGE: Record<number, string> = {
 };
 
 export function PublicStandings() {
-  const [divisionId, setDivisionId] = useState(DIVISIONS[0].id);
-  const division = DIVISIONS.find((d) => d.id === divisionId) ?? DIVISIONS[0];
+  const { tournaments, registrationsFor, matches } = useTournaments();
+  const [tournamentId, setTournamentId] = useState(tournaments[0]?.id ?? "");
+  const tournament = tournaments.find((t) => t.id === tournamentId) ?? tournaments[0];
+
+  const [divisionId, setDivisionId] = useState(tournament?.divisions[0]?.id ?? "");
+  const division = tournament?.divisions.find((d) => d.id === divisionId) ?? tournament?.divisions[0];
+
+  const standings = useMemo(() => {
+    if (!tournament || !division) return [];
+    return computeStandings(matches, registrationsFor(tournament.id, division.id));
+  }, [tournament, division, matches, registrationsFor]);
+
+  if (!tournament || !division) {
+    return (
+      <div className="mx-auto max-w-2xl rounded-2xl border border-dashed border-zinc-300 bg-white p-12 text-center text-sm text-zinc-500">
+        No tournaments with divisions yet.
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -21,19 +39,40 @@ export function PublicStandings() {
           <h3 className="text-base font-semibold text-zinc-900">League Standings</h3>
           <p className="text-sm text-zinc-500">Updated live as scores are confirmed</p>
         </div>
-        <div className="relative">
-          <select
-            value={divisionId}
-            onChange={(event) => setDivisionId(event.target.value)}
-            className="w-full appearance-none rounded-lg border border-zinc-200 bg-white py-2.5 pl-4 pr-10 text-sm font-medium text-zinc-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 sm:w-64"
-          >
-            {DIVISIONS.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.label}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+        <div className="flex flex-wrap items-center gap-2">
+          {tournaments.length > 1 && (
+            <div className="relative">
+              <select
+                value={tournament.id}
+                onChange={(event) => {
+                  setTournamentId(event.target.value);
+                  setDivisionId("");
+                }}
+                className="w-full appearance-none rounded-lg border border-zinc-200 bg-white py-2.5 pl-4 pr-10 text-sm font-medium text-zinc-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 sm:w-56"
+              >
+                {tournaments.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+            </div>
+          )}
+          <div className="relative">
+            <select
+              value={division.id}
+              onChange={(event) => setDivisionId(event.target.value)}
+              className="w-full appearance-none rounded-lg border border-zinc-200 bg-white py-2.5 pl-4 pr-10 text-sm font-medium text-zinc-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 sm:w-64"
+            >
+              {tournament.divisions.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.label} · {d.skillLevel} Skill
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+          </div>
         </div>
       </div>
 
@@ -50,7 +89,14 @@ export function PublicStandings() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {division.standings.map((row) => (
+              {standings.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-5 py-8 text-center text-sm text-zinc-400">
+                    No one&apos;s registered for this division yet.
+                  </td>
+                </tr>
+              )}
+              {standings.map((row) => (
                 <tr
                   key={row.rank}
                   className={`transition-colors hover:bg-zinc-50/70 ${
