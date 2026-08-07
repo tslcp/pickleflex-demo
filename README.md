@@ -79,7 +79,11 @@ buttons:
   this, but there's no UI button for it yet.)
 
 ### Public view
-- **Public Standings** — read-only leaderboard, no sign-in required.
+- **Public Standings** — read-only leaderboard, computed live from actually
+  completed round-robin match results (not mock data) — report a score on
+  the Player Dashboard, then check standings to see it move. Named "public"
+  for a future version without a sign-in wall; this demo still requires
+  being signed in to view any page.
 
 ## 4. Resetting demo data
 
