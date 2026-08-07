@@ -25,7 +25,7 @@ import { ADMIN_MATCHES, ADMIN_STATS } from "@/lib/mock-data";
 import { useTournaments } from "@/lib/tournament-context";
 import { TOURNAMENT_STATUS_LABEL } from "@/lib/tournament-status";
 import { useBracket } from "@/lib/use-bracket";
-import type { AdminStat, MatchStatus, Registration, Tournament, TournamentDivision } from "@/lib/types";
+import type { AdminStat, Cohort, MatchStatus, Registration, Tournament, TournamentDivision } from "@/lib/types";
 
 const STAT_ICONS: Record<AdminStat["key"], LucideIcon> = {
   players: Users,
@@ -357,16 +357,18 @@ function CreateTournamentForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-function DivisionBracketPanel({
+function CohortBracketPanel({
   tournament,
   division,
+  cohort,
   registrations,
 }: {
   tournament: Tournament;
   division: TournamentDivision;
+  cohort: Cohort;
   registrations: Registration[];
 }) {
-  const { bracket, loading, error, setBracket } = useBracket(tournament.id, division.id);
+  const { bracket, loading, error, setBracket } = useBracket(tournament.id, division.id, cohort.id);
   const [format, setFormat] = useState<BracketFormat>("single");
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
@@ -377,22 +379,21 @@ function DivisionBracketPanel({
     try {
       const participants: GenerateBracketInput["participants"] = [...registrations]
         .sort((a, b) => b.skillLevel - a.skillLevel)
-        .map((r) => {
-          const cohort = tournament.cohorts.find((c) => c.id === r.cohortId);
-          return {
-            sourceId: r.id,
-            kind: "single" as const,
-            name: r.name,
-            cohortLabel: cohort?.label ?? "Unknown Cohort",
-            cohortDays: cohort?.days ?? [],
-            members: [{ name: r.name, email: r.email, availability: r.availability }],
-          };
-        });
+        .map((r) => ({
+          sourceId: r.id,
+          kind: "single" as const,
+          name: r.name,
+          cohortLabel: cohort.label,
+          cohortDays: cohort.days,
+          members: [{ name: r.name, email: r.email, availability: r.availability }],
+        }));
 
       const result = await generateBracketRequest({
         tournamentId: tournament.id,
         divisionId: division.id,
         divisionLabel: division.label,
+        cohortId: cohort.id,
+        cohortLabel: cohort.label,
         format,
         participants,
       });
@@ -406,43 +407,75 @@ function DivisionBracketPanel({
 
   if (loading) return null;
 
-  if (bracket) {
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-zinc-100 bg-white p-2.5 sm:flex-row sm:items-center sm:justify-between">
+      <span className="text-xs font-medium text-zinc-600">
+        {cohort.label} <span className="font-normal text-zinc-400">· {registrations.length} registered</span>
+      </span>
+
+      {bracket ? (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-400">
+            {bracket.format === "double" ? "Double" : "Single"}-elimination generated
+          </span>
+          <Link
+            href={`/tournaments/${tournament.id}/bracket?division=${division.id}&cohort=${cohort.id}`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:border-emerald-300 hover:text-emerald-700"
+          >
+            <Trophy className="h-3.5 w-3.5" /> View Bracket
+          </Link>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <select
+            value={format}
+            onChange={(e) => setFormat(e.target.value as BracketFormat)}
+            className="rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-xs text-zinc-600 focus:border-emerald-500 focus:outline-none"
+          >
+            <option value="single">Single Elimination</option>
+            <option value="double">Double Elimination</option>
+          </select>
+          <button
+            type="button"
+            disabled={registrations.length < 2 || generating}
+            onClick={handleGenerate}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:border-emerald-300 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Trophy className="h-3.5 w-3.5" /> {generating ? "Generating…" : "Generate Bracket"}
+          </button>
+        </div>
+      )}
+      {(error || genError) && <p className="text-xs text-red-600">{genError || error}</p>}
+    </div>
+  );
+}
+
+function DivisionCohortBrackets({
+  tournament,
+  division,
+  registrations,
+}: {
+  tournament: Tournament;
+  division: TournamentDivision;
+  registrations: Registration[];
+}) {
+  const cohortGroups = tournament.cohorts
+    .map((cohort) => ({ cohort, regs: registrations.filter((r) => r.cohortId === cohort.id) }))
+    .filter(({ regs }) => regs.length >= 2);
+
+  if (cohortGroups.length === 0) {
     return (
-      <div className="mt-3 flex items-center justify-between gap-2 border-t border-zinc-200 pt-3">
-        <span className="text-xs text-zinc-500">
-          {bracket.format === "double" ? "Double" : "Single"}-elimination bracket generated
-        </span>
-        <Link
-          href={`/tournaments/${tournament.id}/bracket?division=${division.id}`}
-          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:border-emerald-300 hover:text-emerald-700"
-        >
-          <Trophy className="h-3.5 w-3.5" /> View Bracket
-        </Link>
-      </div>
+      <p className="mt-3 border-t border-zinc-200 pt-3 text-xs text-zinc-400">
+        Brackets are generated per cohort — need at least 2 registrants sharing the same cohort.
+      </p>
     );
   }
 
   return (
     <div className="mt-3 flex flex-col gap-2 border-t border-zinc-200 pt-3">
-      <div className="flex items-center gap-2">
-        <select
-          value={format}
-          onChange={(e) => setFormat(e.target.value as BracketFormat)}
-          className="rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-xs text-zinc-600 focus:border-emerald-500 focus:outline-none"
-        >
-          <option value="single">Single Elimination</option>
-          <option value="double">Double Elimination</option>
-        </select>
-        <button
-          type="button"
-          disabled={registrations.length < 2 || generating}
-          onClick={handleGenerate}
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:border-emerald-300 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Trophy className="h-3.5 w-3.5" /> {generating ? "Generating…" : "Generate Bracket"}
-        </button>
-      </div>
-      {(error || genError) && <p className="text-xs text-red-600">{genError || error}</p>}
+      {cohortGroups.map(({ cohort, regs }) => (
+        <CohortBracketPanel key={cohort.id} tournament={tournament} division={division} cohort={cohort} registrations={regs} />
+      ))}
     </div>
   );
 }
@@ -543,7 +576,7 @@ function TournamentOperations() {
                         <UserPlus className="h-3.5 w-3.5" /> Add Test Player
                       </button>
                     </div>
-                    <DivisionBracketPanel tournament={t} division={d} registrations={regs} />
+                    <DivisionCohortBrackets tournament={t} division={d} registrations={regs} />
                   </div>
                 );
               })}

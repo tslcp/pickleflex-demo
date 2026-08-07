@@ -22,6 +22,7 @@ function createConnection(): Database.Database {
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
       skill_level REAL NOT NULL DEFAULT 3.5,
+      zip_code TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL
     );
 
@@ -32,19 +33,28 @@ function createConnection(): Database.Database {
       expires_at TEXT NOT NULL
     );
 
-    -- One row per (tournament, division) bracket that's been generated.
-    -- Tournament/division themselves still live in the client-side tournament
-    -- store; a bracket is created by snapshotting that division's registered
-    -- players in as participants at generation time.
+    -- One row per (tournament, division, cohort) bracket that's been
+    -- generated. Brackets are scoped to a single cohort, not the whole
+    -- division: since every player in a cohort shares the same 3 candidate
+    -- days (and picks >=2 of them), any two cohort-mates are structurally
+    -- guaranteed to have overlapping availability, so every match in a
+    -- cohort-scoped bracket can always be auto-scheduled -- unlike a
+    -- division-wide bracket, which can pair players from different cohorts
+    -- with zero shared days and get stuck "unscheduled".
+    -- Tournament/division/cohort themselves still live in the client-side
+    -- tournament store; a bracket is created by snapshotting that cohort's
+    -- registered players in as participants at generation time.
     CREATE TABLE IF NOT EXISTS brackets (
       id TEXT PRIMARY KEY,
       tournament_id TEXT NOT NULL,
       division_id TEXT NOT NULL,
       division_label TEXT NOT NULL,
+      cohort_id TEXT NOT NULL,
+      cohort_label TEXT NOT NULL,
       format TEXT NOT NULL CHECK (format IN ('single', 'double')),
       status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed')),
       created_at TEXT NOT NULL,
-      UNIQUE (tournament_id, division_id)
+      UNIQUE (tournament_id, division_id, cohort_id)
     );
 
     -- A bracket entrant: one player (kind='single') or one doubles team

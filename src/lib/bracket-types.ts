@@ -30,6 +30,9 @@ export interface GenerateBracketInput {
   tournamentId: string;
   divisionId: string;
   divisionLabel: string;
+  /** Brackets are scoped to one cohort — see the brackets table comment in db.ts for why. */
+  cohortId: string;
+  cohortLabel: string;
   format: BracketFormat;
   /** Already in seed order (index 0 = seed 1). */
   participants: ParticipantInput[];
@@ -75,6 +78,8 @@ export interface BracketDTO {
   tournamentId: string;
   divisionId: string;
   divisionLabel: string;
+  cohortId: string;
+  cohortLabel: string;
   format: BracketFormat;
   status: "active" | "completed";
   participants: BracketParticipantDTO[];

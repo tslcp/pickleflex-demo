@@ -9,6 +9,7 @@ interface UserRow {
   email: string;
   password_hash: string;
   skill_level: number;
+  zip_code: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
     name: user.name,
     email: user.email,
     skillLevel: user.skill_level,
+    zipCode: user.zip_code,
   });
   response.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,

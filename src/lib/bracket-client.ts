@@ -6,9 +6,13 @@ async function handle(res: Response) {
   return data;
 }
 
-export async function fetchBracket(tournamentId: string, divisionId: string): Promise<BracketDTO | null> {
+export async function fetchBracket(
+  tournamentId: string,
+  divisionId: string,
+  cohortId: string,
+): Promise<BracketDTO | null> {
   const res = await fetch(
-    `/api/brackets?tournamentId=${encodeURIComponent(tournamentId)}&divisionId=${encodeURIComponent(divisionId)}`,
+    `/api/brackets?tournamentId=${encodeURIComponent(tournamentId)}&divisionId=${encodeURIComponent(divisionId)}&cohortId=${encodeURIComponent(cohortId)}`,
   );
   if (res.status === 404) return null;
   return handle(res);

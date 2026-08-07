@@ -3,6 +3,7 @@ export interface AuthUser {
   name: string;
   email: string;
   skillLevel: number;
+  zipCode: string;
 }
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";

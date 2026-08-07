@@ -10,6 +10,7 @@ export interface SessionUser {
   name: string;
   email: string;
   skillLevel: number;
+  zipCode: string;
 }
 
 export function createSession(userId: string): { token: string; expiresAt: string } {
@@ -26,7 +27,8 @@ export function getUserBySessionToken(token: string): SessionUser | null {
   const row = getDb()
     .prepare(
       `SELECT users.id as id, users.name as name, users.email as email,
-              users.skill_level as skillLevel, sessions.expires_at as expiresAt
+              users.skill_level as skillLevel, users.zip_code as zipCode,
+              sessions.expires_at as expiresAt
        FROM sessions
        JOIN users ON users.id = sessions.user_id
        WHERE sessions.id = ?`,
@@ -38,7 +40,7 @@ export function getUserBySessionToken(token: string): SessionUser | null {
     deleteSession(token);
     return null;
   }
-  return { id: row.id, name: row.name, email: row.email, skillLevel: row.skillLevel };
+  return { id: row.id, name: row.name, email: row.email, skillLevel: row.skillLevel, zipCode: row.zipCode };
 }
 
 export function deleteSession(token: string) {

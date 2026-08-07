@@ -16,6 +16,7 @@ export function SignUp() {
   const { setSessionUser } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [zipCode, setZipCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [skillLevel, setSkillLevel] = useState("3.5");
@@ -36,7 +37,7 @@ export function SignUp() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, skillLevel: Number(skillLevel) }),
+        body: JSON.stringify({ name, email, password, zipCode, skillLevel: Number(skillLevel) }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -89,6 +90,20 @@ export function SignUp() {
                 required
                 className={inputClass}
                 autoComplete="email"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-zinc-700">Zip Code</span>
+              <input
+                value={zipCode}
+                onChange={(e) => setZipCode(e.target.value)}
+                required
+                pattern="\d{5}(-\d{4})?"
+                title="5-digit zip code"
+                placeholder="94103"
+                className={inputClass}
+                autoComplete="postal-code"
+                inputMode="numeric"
               />
             </label>
             <label className="flex flex-col gap-1.5 text-sm">

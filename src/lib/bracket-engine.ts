@@ -75,6 +75,8 @@ interface BracketRow {
   tournament_id: string;
   division_id: string;
   division_label: string;
+  cohort_id: string;
+  cohort_label: string;
   format: BracketFormat;
   status: "active" | "completed";
   created_at: string;
@@ -228,10 +230,10 @@ function advanceFrom(matchId: string, winnerId: string, loserId: string | null) 
 export function generateBracket(input: GenerateBracketInput): BracketDTO {
   const db = getDb();
   const existing = db
-    .prepare("SELECT id FROM brackets WHERE tournament_id = ? AND division_id = ?")
-    .get(input.tournamentId, input.divisionId);
+    .prepare("SELECT id FROM brackets WHERE tournament_id = ? AND division_id = ? AND cohort_id = ?")
+    .get(input.tournamentId, input.divisionId, input.cohortId);
   if (existing) {
-    throw new Error("A bracket has already been generated for this division.");
+    throw new Error("A bracket has already been generated for this cohort.");
   }
   if (input.participants.length < 2) {
     throw new Error("Need at least 2 participants to generate a bracket.");
@@ -240,9 +242,18 @@ export function generateBracket(input: GenerateBracketInput): BracketDTO {
   const bracketId = createId("bracket");
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO brackets (id, tournament_id, division_id, division_label, format, status, created_at)
-     VALUES (?, ?, ?, ?, ?, 'active', ?)`,
-  ).run(bracketId, input.tournamentId, input.divisionId, input.divisionLabel, input.format, now);
+    `INSERT INTO brackets (id, tournament_id, division_id, division_label, cohort_id, cohort_label, format, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
+  ).run(
+    bracketId,
+    input.tournamentId,
+    input.divisionId,
+    input.divisionLabel,
+    input.cohortId,
+    input.cohortLabel,
+    input.format,
+    now,
+  );
 
   const participantIds: string[] = [];
   input.participants.forEach((p, index) => {
@@ -521,6 +532,8 @@ export function getBracketDTO(bracketId: string): BracketDTO | null {
     tournamentId: bracket.tournament_id,
     divisionId: bracket.division_id,
     divisionLabel: bracket.division_label,
+    cohortId: bracket.cohort_id,
+    cohortLabel: bracket.cohort_label,
     format: bracket.format,
     status: bracket.status,
     participants: [...participantById.values()],
@@ -528,10 +541,10 @@ export function getBracketDTO(bracketId: string): BracketDTO | null {
   };
 }
 
-export function getBracketForDivision(tournamentId: string, divisionId: string): BracketDTO | null {
+export function getBracketForCohort(tournamentId: string, divisionId: string, cohortId: string): BracketDTO | null {
   const row = getDb()
-    .prepare("SELECT id FROM brackets WHERE tournament_id = ? AND division_id = ?")
-    .get(tournamentId, divisionId) as { id: string } | undefined;
+    .prepare("SELECT id FROM brackets WHERE tournament_id = ? AND division_id = ? AND cohort_id = ?")
+    .get(tournamentId, divisionId, cohortId) as { id: string } | undefined;
   return row ? getBracketDTO(row.id) : null;
 }
 

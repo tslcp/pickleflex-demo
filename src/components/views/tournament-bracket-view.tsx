@@ -14,7 +14,9 @@ export function TournamentBracketView({ id }: { id: string }) {
   const tournament = tournaments.find((t) => t.id === id);
   const searchParams = useSearchParams();
   const initialDivisionId = searchParams.get("division") ?? tournament?.divisions[0]?.id ?? "";
+  const initialCohortId = searchParams.get("cohort") ?? tournament?.cohorts[0]?.id ?? "";
   const [divisionId, setDivisionId] = useState(initialDivisionId);
+  const [cohortId, setCohortId] = useState(initialCohortId);
 
   if (!tournament) {
     return (
@@ -31,6 +33,7 @@ export function TournamentBracketView({ id }: { id: string }) {
   }
 
   const division = tournament.divisions.find((d) => d.id === divisionId) ?? tournament.divisions[0];
+  const cohort = tournament.cohorts.find((c) => c.id === cohortId) ?? tournament.cohorts[0];
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -46,34 +49,57 @@ export function TournamentBracketView({ id }: { id: string }) {
             <Trophy className="h-5 w-5 text-emerald-600" /> Bracket
           </h1>
         </div>
-        {tournament.divisions.length > 1 && (
-          <select
-            value={division?.id ?? ""}
-            onChange={(e) => setDivisionId(e.target.value)}
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-          >
-            {tournament.divisions.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.label} · {d.skillLevel} Skill
-              </option>
-            ))}
-          </select>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {tournament.divisions.length > 1 && (
+            <select
+              value={division?.id ?? ""}
+              onChange={(e) => setDivisionId(e.target.value)}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            >
+              {tournament.divisions.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.label} · {d.skillLevel} Skill
+                </option>
+              ))}
+            </select>
+          )}
+          {tournament.cohorts.length > 1 && (
+            <select
+              value={cohort?.id ?? ""}
+              onChange={(e) => setCohortId(e.target.value)}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            >
+              {tournament.cohorts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
-      {division ? (
-        <DivisionBracket tournamentId={tournament.id} divisionId={division.id} />
+      {division && cohort ? (
+        <DivisionBracket tournamentId={tournament.id} divisionId={division.id} cohortId={cohort.id} />
       ) : (
         <p className="rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center text-sm text-zinc-500">
-          This tournament has no divisions.
+          This tournament has no divisions or cohorts set up.
         </p>
       )}
     </div>
   );
 }
 
-function DivisionBracket({ tournamentId, divisionId }: { tournamentId: string; divisionId: string }) {
-  const { bracket, loading, error, setBracket } = useBracket(tournamentId, divisionId);
+function DivisionBracket({
+  tournamentId,
+  divisionId,
+  cohortId,
+}: {
+  tournamentId: string;
+  divisionId: string;
+  cohortId: string;
+}) {
+  const { bracket, loading, error, setBracket } = useBracket(tournamentId, divisionId, cohortId);
 
   if (loading) {
     return <p className="text-sm text-zinc-400">Loading bracket…</p>;
@@ -86,7 +112,8 @@ function DivisionBracket({ tournamentId, divisionId }: { tournamentId: string; d
   if (!bracket) {
     return (
       <p className="rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center text-sm text-zinc-500">
-        No bracket has been generated for this division yet. Check back once the tournament organizer starts it.
+        No bracket has been generated for this division and cohort yet. Check back once the tournament organizer
+        starts it.
       </p>
     );
   }
