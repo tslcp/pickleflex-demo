@@ -21,9 +21,9 @@ To stop the app, go back to the terminal and press `Ctrl+C`.
 
 There's no real authentication behind this — it's a local account system for the
 demo. Go to `/signup` and create any account with a made-up name, any email
-address (doesn't need to be real), and a password (8+ characters). You'll be
-signed in automatically afterward. `/signin` works the same way for a
-returning account.
+address (doesn't need to be real), a zip code (any real 5-digit one), and a
+password (8+ characters). You'll be signed in automatically afterward.
+`/signin` works the same way for a returning account.
 
 ## 3. What to try
 
@@ -51,8 +51,14 @@ mechanics are:
   cohort availability; a match only stays "Unscheduled" if the two players
   genuinely have no overlapping day (usually because they're in different
   cohorts) — check the **"When"** column in the match table.
-- **Generate Bracket** (per division) — pick Single or Double Elimination and
-  generate a real tournament bracket from that division's registrants.
+- **Generate Bracket** — brackets are generated **per cohort within a
+  division**, not for the whole division at once. You'll see one row per
+  cohort that has at least 2 registrants (e.g. "Mon / Wed / Fri" and
+  "Tue / Thu / Sat" each get their own bracket). This is deliberate: every
+  player in a cohort shares the same 3 candidate days, so any two cohort-mates
+  are guaranteed to have an overlapping day — meaning every match in a
+  cohort's bracket gets auto-scheduled with a real date/time, instead of
+  risking a division-wide bracket pairing two players who never share a day.
   - Click **View Bracket** to see it. Byes are handled automatically, matches
     get scheduled the same overlap-based way, and — for double elimination —
     you can watch a loser drop into the losers' bracket and, if they make it
@@ -61,6 +67,7 @@ mechanics are:
   - Matches whose *next* opponent isn't decided yet (still waiting on another
     match to finish) show as **"Tentative"** with a preview of both possible
     scheduled times — it locks in instantly once the other match ends.
+  - The bracket page has both a division picker and a cohort picker.
 
 ### Reschedule flow
 On a bracket page, under **My Matches**, if you're signed in as one of the two
