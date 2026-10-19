@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
   }
 
-  const user = getUserBySessionToken(token);
+  const user = await getUserBySessionToken(token);
   if (!user) {
     // Cookie is present but doesn't match a live session (e.g. the local
     // database was reset) — clear it so the browser stops sending a dead

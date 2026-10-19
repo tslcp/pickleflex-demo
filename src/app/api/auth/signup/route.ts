@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 import { createSession, SESSION_COOKIE } from "@/lib/session";
 
@@ -32,8 +32,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
   }
 
-  const db = getDb();
-  const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
+  const sql = getSql();
+  const [existing] = await sql`SELECT id FROM users WHERE email = ${email}`;
   if (existing) {
     return NextResponse.json({ error: "An account with that email already exists." }, { status: 409 });
   }
@@ -42,11 +42,12 @@ export async function POST(request: NextRequest) {
   const passwordHash = hashPassword(password);
   const validSkill = Number.isFinite(skillLevel) && skillLevel >= 1 && skillLevel <= 6 ? skillLevel : 3.5;
 
-  db.prepare(
-    "INSERT INTO users (id, name, email, password_hash, skill_level, zip_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-  ).run(id, name, email, passwordHash, validSkill, zipCode, new Date().toISOString());
+  await sql`
+    INSERT INTO users (id, name, email, password_hash, skill_level, zip_code, created_at)
+    VALUES (${id}, ${name}, ${email}, ${passwordHash}, ${validSkill}, ${zipCode}, ${new Date().toISOString()})
+  `;
 
-  const { token, expiresAt } = createSession(id);
+  const { token, expiresAt } = await createSession(id);
 
   const response = NextResponse.json({ id, name, email, skillLevel: validSkill, zipCode });
   response.cookies.set(SESSION_COOKIE, token, {

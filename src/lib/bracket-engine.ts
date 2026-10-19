@@ -9,7 +9,7 @@ import type {
   PlaceholderCandidateDTO,
   RescheduleResult,
 } from "@/lib/bracket-types";
-import { getDb } from "@/lib/db";
+import { getSql, type Db } from "@/lib/db";
 import { createId } from "@/lib/id";
 import {
   findEarliestOverlap,
@@ -82,51 +82,59 @@ interface BracketRow {
   created_at: string;
 }
 
-function getBracketRow(bracketId: string): BracketRow | undefined {
-  return getDb().prepare("SELECT * FROM brackets WHERE id = ?").get(bracketId) as BracketRow | undefined;
+// Every internal helper takes `db` explicitly so the mutating entry points can
+// run the whole cascade (score → advance → reschedule next match) inside one
+// transaction.
+
+async function getBracketRow(db: Db, bracketId: string): Promise<BracketRow | undefined> {
+  const [row] = await db<BracketRow[]>`SELECT * FROM brackets WHERE id = ${bracketId}`;
+  return row;
 }
 
-function getMatchRow(matchId: string): MatchRow | undefined {
-  return getDb().prepare("SELECT * FROM bracket_matches WHERE id = ?").get(matchId) as MatchRow | undefined;
+async function getMatchRow(db: Db, matchId: string): Promise<MatchRow | undefined> {
+  const [row] = await db<MatchRow[]>`SELECT * FROM bracket_matches WHERE id = ${matchId}`;
+  return row;
 }
 
-function getParticipantRow(participantId: string): ParticipantRow | undefined {
-  return getDb().prepare("SELECT * FROM participants WHERE id = ?").get(participantId) as ParticipantRow | undefined;
+async function getParticipantRow(db: Db, participantId: string): Promise<ParticipantRow | undefined> {
+  const [row] = await db<ParticipantRow[]>`SELECT * FROM participants WHERE id = ${participantId}`;
+  return row;
 }
 
-function findFeederFor(targetMatchId: string, targetSlot: 1 | 2): MatchRow | undefined {
-  return getDb()
-    .prepare(
-      `SELECT * FROM bracket_matches
-       WHERE (next_match_winner_id = ? AND next_match_winner_slot = ?)
-          OR (next_match_loser_id = ? AND next_match_loser_slot = ?)`,
-    )
-    .get(targetMatchId, targetSlot, targetMatchId, targetSlot) as MatchRow | undefined;
+async function findFeederFor(db: Db, targetMatchId: string, targetSlot: 1 | 2): Promise<MatchRow | undefined> {
+  const [row] = await db<MatchRow[]>`
+    SELECT * FROM bracket_matches
+    WHERE (next_match_winner_id = ${targetMatchId} AND next_match_winner_slot = ${targetSlot})
+       OR (next_match_loser_id = ${targetMatchId} AND next_match_loser_slot = ${targetSlot})
+    LIMIT 1
+  `;
+  return row;
 }
 
-function setSlot(matchId: string, slot: 1 | 2, participantId: string) {
+async function setSlot(db: Db, matchId: string, slot: 1 | 2, participantId: string) {
   const column = slot === 1 ? "participant1_id" : "participant2_id";
-  getDb().prepare(`UPDATE bracket_matches SET ${column} = ? WHERE id = ?`).run(participantId, matchId);
+  await db`UPDATE bracket_matches SET ${db(column)} = ${participantId} WHERE id = ${matchId}`;
 }
 
-function scheduleMatch(matchId: string, p1Id: string, p2Id: string) {
-  const p1 = getParticipantRow(p1Id)!;
-  const p2 = getParticipantRow(p2Id)!;
+async function scheduleMatch(db: Db, matchId: string, p1Id: string, p2Id: string) {
+  const p1 = (await getParticipantRow(db, p1Id))!;
+  const p2 = (await getParticipantRow(db, p2Id))!;
   const blocksA: AvailabilityBlock[] = JSON.parse(p1.availability_json);
   const blocksB: AvailabilityBlock[] = JSON.parse(p2.availability_json);
 
   const slot = findEarliestOverlap(FULL_WEEK_ORDER, blocksA, blocksB, []);
-  const db = getDb();
   if (slot) {
     const scheduledAt = nextCalendarDateTime(slot.day, slot.hour);
-    db.prepare(
-      "UPDATE bracket_matches SET status = 'scheduled', scheduled_at = ?, tried_slots_json = ? WHERE id = ?",
-    ).run(scheduledAt, JSON.stringify([slot]), matchId);
+    await db`
+      UPDATE bracket_matches
+      SET status = 'scheduled', scheduled_at = ${scheduledAt}, tried_slots_json = ${JSON.stringify([slot])}
+      WHERE id = ${matchId}
+    `;
   } else {
     // Cross-cohort pairing with zero shared days — no automatic slot exists.
     // Leaves both participants set so the match is playable, just needs an
     // admin to set a time manually.
-    db.prepare("UPDATE bracket_matches SET status = 'unscheduled' WHERE id = ?").run(matchId);
+    await db`UPDATE bracket_matches SET status = 'unscheduled' WHERE id = ${matchId}`;
   }
 }
 
@@ -137,40 +145,36 @@ function scheduleMatch(matchId: string, p1Id: string, p2Id: string) {
  * feeder match resolves, tryResolveMatch() picks the matching candidate
  * instantly instead of recomputing.
  */
-function maybeSetPlaceholderCandidates(matchId: string) {
-  const match = getMatchRow(matchId)!;
+async function maybeSetPlaceholderCandidates(db: Db, matchId: string) {
+  const match = (await getMatchRow(db, matchId))!;
   const knownId = match.participant1_id ?? match.participant2_id;
   if (!knownId) return;
   const emptySlot: 1 | 2 = match.participant1_id ? 2 : 1;
 
-  const feeder = findFeederFor(matchId, emptySlot);
+  const feeder = await findFeederFor(db, matchId, emptySlot);
   if (!feeder || feeder.status === "completed" || !feeder.participant1_id || !feeder.participant2_id) return;
 
-  const known = getParticipantRow(knownId)!;
-  const candidateA = getParticipantRow(feeder.participant1_id)!;
-  const candidateB = getParticipantRow(feeder.participant2_id)!;
+  const known = (await getParticipantRow(db, knownId))!;
+  const candidateA = (await getParticipantRow(db, feeder.participant1_id))!;
+  const candidateB = (await getParticipantRow(db, feeder.participant2_id))!;
   const blocksKnown: AvailabilityBlock[] = JSON.parse(known.availability_json);
 
   const slotA = findEarliestOverlap(FULL_WEEK_ORDER, blocksKnown, JSON.parse(candidateA.availability_json));
   const slotB = findEarliestOverlap(FULL_WEEK_ORDER, blocksKnown, JSON.parse(candidateB.availability_json));
 
-  getDb()
-    .prepare(
-      `UPDATE bracket_matches
-       SET status = 'tentative_placeholder',
-           placeholder_candidate_a_json = ?,
-           placeholder_candidate_b_json = ?
-       WHERE id = ?`,
-    )
-    .run(
-      JSON.stringify({ participantId: candidateA.id, participantName: candidateA.name, slot: slotA }),
-      JSON.stringify({ participantId: candidateB.id, participantName: candidateB.name, slot: slotB }),
-      matchId,
-    );
+  const candidateAJson = JSON.stringify({ participantId: candidateA.id, participantName: candidateA.name, slot: slotA });
+  const candidateBJson = JSON.stringify({ participantId: candidateB.id, participantName: candidateB.name, slot: slotB });
+  await db`
+    UPDATE bracket_matches
+    SET status = 'tentative_placeholder',
+        placeholder_candidate_a_json = ${candidateAJson},
+        placeholder_candidate_b_json = ${candidateBJson}
+    WHERE id = ${matchId}
+  `;
 }
 
-function tryResolveMatch(matchId: string) {
-  const match = getMatchRow(matchId);
+async function tryResolveMatch(db: Db, matchId: string) {
+  const match = await getMatchRow(db, matchId);
   if (!match) return;
   if (match.status === "completed" || match.status === "scheduled" || match.status === "forfeited") return;
 
@@ -180,8 +184,8 @@ function tryResolveMatch(matchId: string) {
   if (match.is_bye) {
     if ((p1 !== null) !== (p2 !== null)) {
       const winnerId = (p1 ?? p2)!;
-      getDb().prepare("UPDATE bracket_matches SET status = 'completed', winner_id = ? WHERE id = ?").run(winnerId, matchId);
-      advanceFrom(matchId, winnerId, null);
+      await db`UPDATE bracket_matches SET status = 'completed', winner_id = ${winnerId} WHERE id = ${matchId}`;
+      await advanceFrom(db, matchId, winnerId, null);
     }
     return;
   }
@@ -197,29 +201,31 @@ function tryResolveMatch(matchId: string) {
 
     if (matched?.slot) {
       const scheduledAt = nextCalendarDateTime(matched.slot.day, matched.slot.hour);
-      getDb()
-        .prepare("UPDATE bracket_matches SET status = 'scheduled', scheduled_at = ?, tried_slots_json = ? WHERE id = ?")
-        .run(scheduledAt, JSON.stringify([matched.slot]), matchId);
+      await db`
+        UPDATE bracket_matches
+        SET status = 'scheduled', scheduled_at = ${scheduledAt}, tried_slots_json = ${JSON.stringify([matched.slot])}
+        WHERE id = ${matchId}
+      `;
     } else {
-      scheduleMatch(matchId, p1, p2);
+      await scheduleMatch(db, matchId, p1, p2);
     }
     return;
   }
 
   if ((p1 !== null) !== (p2 !== null)) {
-    maybeSetPlaceholderCandidates(matchId);
+    await maybeSetPlaceholderCandidates(db, matchId);
   }
 }
 
-function advanceFrom(matchId: string, winnerId: string, loserId: string | null) {
-  const match = getMatchRow(matchId)!;
+async function advanceFrom(db: Db, matchId: string, winnerId: string, loserId: string | null) {
+  const match = (await getMatchRow(db, matchId))!;
   if (match.next_match_winner_id && match.next_match_winner_slot) {
-    setSlot(match.next_match_winner_id, match.next_match_winner_slot as 1 | 2, winnerId);
-    tryResolveMatch(match.next_match_winner_id);
+    await setSlot(db, match.next_match_winner_id, match.next_match_winner_slot as 1 | 2, winnerId);
+    await tryResolveMatch(db, match.next_match_winner_id);
   }
   if (loserId && match.next_match_loser_id && match.next_match_loser_slot) {
-    setSlot(match.next_match_loser_id, match.next_match_loser_slot as 1 | 2, loserId);
-    tryResolveMatch(match.next_match_loser_id);
+    await setSlot(db, match.next_match_loser_id, match.next_match_loser_slot as 1 | 2, loserId);
+    await tryResolveMatch(db, match.next_match_loser_id);
   }
 }
 
@@ -227,163 +233,158 @@ function advanceFrom(matchId: string, winnerId: string, loserId: string | null) 
 // Generation
 // ---------------------------------------------------------------------------
 
-export function generateBracket(input: GenerateBracketInput): BracketDTO {
-  const db = getDb();
-  const existing = db
-    .prepare("SELECT id FROM brackets WHERE tournament_id = ? AND division_id = ? AND cohort_id = ?")
-    .get(input.tournamentId, input.divisionId, input.cohortId);
-  if (existing) {
-    throw new Error("A bracket has already been generated for this cohort.");
-  }
-  if (input.participants.length < 2) {
-    throw new Error("Need at least 2 participants to generate a bracket.");
-  }
-
-  const bracketId = createId("bracket");
-  const now = new Date().toISOString();
-  db.prepare(
-    `INSERT INTO brackets (id, tournament_id, division_id, division_label, cohort_id, cohort_label, format, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
-  ).run(
-    bracketId,
-    input.tournamentId,
-    input.divisionId,
-    input.divisionLabel,
-    input.cohortId,
-    input.cohortLabel,
-    input.format,
-    now,
-  );
-
-  const participantIds: string[] = [];
-  input.participants.forEach((p, index) => {
-    const participantId = createId("participant");
-    const blocks: AvailabilityBlock[] =
-      p.kind === "team" && p.members.length === 2
-        ? intersectBlocks(toBlocks(p.members[0].availability), toBlocks(p.members[1].availability))
-        : toBlocks(p.members[0]?.availability ?? []);
-
-    db.prepare(
-      `INSERT INTO participants
-         (id, bracket_id, kind, name, seed, cohort_label, cohort_days_json, availability_json, reschedule_count, eliminated, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)`,
-    ).run(
-      participantId,
-      bracketId,
-      p.kind,
-      p.name,
-      index + 1,
-      p.cohortLabel,
-      JSON.stringify(p.cohortDays),
-      JSON.stringify(blocks),
-      now,
-    );
-
-    for (const member of p.members) {
-      db.prepare("INSERT INTO participant_members (id, participant_id, name, email) VALUES (?, ?, ?, ?)").run(
-        createId("member"),
-        participantId,
-        member.name,
-        member.email,
-      );
+export function generateBracket(input: GenerateBracketInput): Promise<BracketDTO> {
+  // One transaction for the whole bracket, so a failure partway through never
+  // leaves a half-inserted round tree behind.
+  return getSql().begin(async (db) => {
+    const [existing] = await db`
+      SELECT id FROM brackets
+      WHERE tournament_id = ${input.tournamentId} AND division_id = ${input.divisionId} AND cohort_id = ${input.cohortId}
+    `;
+    if (existing) {
+      throw new Error("A bracket has already been generated for this cohort.");
+    }
+    if (input.participants.length < 2) {
+      throw new Error("Need at least 2 participants to generate a bracket.");
     }
 
-    participantIds.push(participantId);
-  });
+    const bracketId = createId("bracket");
+    const now = new Date().toISOString();
+    await db`
+      INSERT INTO brackets (id, tournament_id, division_id, division_label, cohort_id, cohort_label, format, status, created_at)
+      VALUES (${bracketId}, ${input.tournamentId}, ${input.divisionId}, ${input.divisionLabel},
+              ${input.cohortId}, ${input.cohortLabel}, ${input.format}, 'active', ${now})
+    `;
 
-  const drafts = buildBracket(input.format, participantIds);
-  const tempToReal = new Map<string, string>();
-  for (const draft of drafts) tempToReal.set(draft.tempId, createId("match"));
+    const participantRows: ParticipantRow[] = [];
+    const memberRows: ParticipantMemberRow[] = [];
+    input.participants.forEach((p, index) => {
+      const participantId = createId("participant");
+      const blocks: AvailabilityBlock[] =
+        p.kind === "team" && p.members.length === 2
+          ? intersectBlocks(toBlocks(p.members[0].availability), toBlocks(p.members[1].availability))
+          : toBlocks(p.members[0]?.availability ?? []);
 
-  const insertMatch = db.prepare(
-    `INSERT INTO bracket_matches
-       (id, bracket_id, bracket_side, round, slot, participant1_id, participant2_id, status, is_bye,
-        next_match_winner_id, next_match_winner_slot, next_match_loser_id, next_match_loser_slot,
-        tried_slots_json, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_participants', ?, ?, ?, ?, ?, '[]', ?)`,
-  );
+      participantRows.push({
+        id: participantId,
+        bracket_id: bracketId,
+        kind: p.kind,
+        name: p.name,
+        seed: index + 1,
+        cohort_label: p.cohortLabel,
+        cohort_days_json: JSON.stringify(p.cohortDays),
+        availability_json: JSON.stringify(blocks),
+        reschedule_count: 0,
+        eliminated: 0,
+        created_at: now,
+      });
+      for (const member of p.members) {
+        memberRows.push({ id: createId("member"), participant_id: participantId, name: member.name, email: member.email });
+      }
+    });
 
-  for (const draft of drafts) {
-    insertMatch.run(
-      tempToReal.get(draft.tempId),
-      bracketId,
-      draft.bracketSide,
-      draft.round,
-      draft.slot,
-      draft.participant1Id,
-      draft.participant2Id,
-      draft.isBye ? 1 : 0,
-      draft.nextMatchWinnerTempId ? tempToReal.get(draft.nextMatchWinnerTempId) : null,
-      draft.nextMatchWinnerSlot,
-      draft.nextMatchLoserTempId ? tempToReal.get(draft.nextMatchLoserTempId) : null,
-      draft.nextMatchLoserSlot,
-      now,
+    // Bulk inserts: one round trip per table instead of one per row.
+    await db`INSERT INTO participants ${db(participantRows)}`;
+    if (memberRows.length > 0) {
+      await db`INSERT INTO participant_members ${db(memberRows)}`;
+    }
+
+    const drafts = buildBracket(
+      input.format,
+      participantRows.map((p) => p.id),
     );
-  }
+    const tempToReal = new Map<string, string>();
+    for (const draft of drafts) tempToReal.set(draft.tempId, createId("match"));
 
-  // Resolve in round order so byes and any immediately-known matches cascade
-  // forward correctly in a single pass.
-  const orderedIds = drafts
-    .slice()
-    .sort((a, b) => a.round - b.round)
-    .map((d) => tempToReal.get(d.tempId)!);
-  for (const id of orderedIds) tryResolveMatch(id);
+    const matchRows = drafts.map((draft) => ({
+      id: tempToReal.get(draft.tempId)!,
+      bracket_id: bracketId,
+      bracket_side: draft.bracketSide,
+      round: draft.round,
+      slot: draft.slot,
+      participant1_id: draft.participant1Id,
+      participant2_id: draft.participant2Id,
+      status: "pending_participants",
+      is_bye: draft.isBye ? 1 : 0,
+      next_match_winner_id: draft.nextMatchWinnerTempId ? tempToReal.get(draft.nextMatchWinnerTempId)! : null,
+      next_match_winner_slot: draft.nextMatchWinnerSlot,
+      next_match_loser_id: draft.nextMatchLoserTempId ? tempToReal.get(draft.nextMatchLoserTempId)! : null,
+      next_match_loser_slot: draft.nextMatchLoserSlot,
+      tried_slots_json: "[]",
+      created_at: now,
+    }));
+    await db`INSERT INTO bracket_matches ${db(matchRows)}`;
 
-  return getBracketDTO(bracketId)!;
+    // Resolve in round order so byes and any immediately-known matches cascade
+    // forward correctly in a single pass.
+    const orderedIds = drafts
+      .slice()
+      .sort((a, b) => a.round - b.round)
+      .map((d) => tempToReal.get(d.tempId)!);
+    for (const id of orderedIds) await tryResolveMatch(db, id);
+
+    return (await getBracketDTO(bracketId, db))!;
+  });
 }
 
 // ---------------------------------------------------------------------------
 // Score submission
 // ---------------------------------------------------------------------------
 
-export function submitMatchScore(matchId: string, scoreA: number, scoreB: number): BracketDTO {
-  const match = getMatchRow(matchId);
-  if (!match) throw new Error("Match not found.");
-  if (!match.participant1_id || !match.participant2_id) throw new Error("Match is not ready to be played yet.");
-  if (match.status === "completed") throw new Error("This match has already been completed.");
-  if (scoreA === scoreB) throw new Error("Scores cannot be tied.");
+export function submitMatchScore(matchId: string, scoreA: number, scoreB: number): Promise<BracketDTO> {
+  return getSql().begin(async (db) => {
+    // FOR UPDATE: two simultaneous submissions for the same match would
+    // otherwise both pass the "already completed" check and advance twice.
+    const [match] = await db<MatchRow[]>`SELECT * FROM bracket_matches WHERE id = ${matchId} FOR UPDATE`;
+    if (!match) throw new Error("Match not found.");
+    if (!match.participant1_id || !match.participant2_id) throw new Error("Match is not ready to be played yet.");
+    if (match.status === "completed") throw new Error("This match has already been completed.");
+    if (scoreA === scoreB) throw new Error("Scores cannot be tied.");
 
-  const bracket = getBracketRow(match.bracket_id)!;
-  const winnerId = scoreA > scoreB ? match.participant1_id : match.participant2_id;
-  const loserId = scoreA > scoreB ? match.participant2_id : match.participant1_id;
+    const bracket = (await getBracketRow(db, match.bracket_id))!;
+    const winnerId = scoreA > scoreB ? match.participant1_id : match.participant2_id;
+    const loserId = scoreA > scoreB ? match.participant2_id : match.participant1_id;
 
-  const db = getDb();
-  db.prepare(
-    "UPDATE bracket_matches SET status = 'completed', score_a = ?, score_b = ?, winner_id = ?, loser_id = ? WHERE id = ?",
-  ).run(scoreA, scoreB, winnerId, loserId, matchId);
+    await db`
+      UPDATE bracket_matches
+      SET status = 'completed', score_a = ${scoreA}, score_b = ${scoreB}, winner_id = ${winnerId}, loser_id = ${loserId}
+      WHERE id = ${matchId}
+    `;
 
-  const eliminatesLoser = bracket.format === "single" || match.bracket_side !== "winners";
-  if (eliminatesLoser) {
-    db.prepare("UPDATE participants SET eliminated = 1 WHERE id = ?").run(loserId);
-  }
+    const eliminatesLoser = bracket.format === "single" || match.bracket_side !== "winners";
+    if (eliminatesLoser) {
+      await db`UPDATE participants SET eliminated = 1 WHERE id = ${loserId}`;
+    }
 
-  if (match.bracket_side === "grand_final") {
-    if (match.round === 1 && winnerId === match.participant2_id) {
-      // The losers-bracket entrant won game 1 — both sides now have exactly
-      // one loss, so a single decider "bracket reset" match is required.
-      const resetId = createId("match");
-      db.prepare(
-        `INSERT INTO bracket_matches
-           (id, bracket_id, bracket_side, round, slot, participant1_id, participant2_id, status, is_bye,
-            tried_slots_json, created_at)
-         VALUES (?, ?, 'grand_final', 2, 0, ?, ?, 'pending_participants', 0, '[]', ?)`,
-      ).run(resetId, match.bracket_id, match.participant1_id, match.participant2_id, new Date().toISOString());
-      // The reset participant who lost game 1 is not actually eliminated yet.
-      db.prepare("UPDATE participants SET eliminated = 0 WHERE id = ?").run(loserId);
-      tryResolveMatch(resetId);
+    if (match.bracket_side === "grand_final") {
+      if (match.round === 1 && winnerId === match.participant2_id) {
+        // The losers-bracket entrant won game 1 — both sides now have exactly
+        // one loss, so a single decider "bracket reset" match is required.
+        const resetId = createId("match");
+        await db`
+          INSERT INTO bracket_matches
+            (id, bracket_id, bracket_side, round, slot, participant1_id, participant2_id, status, is_bye,
+             tried_slots_json, created_at)
+          VALUES (${resetId}, ${match.bracket_id}, 'grand_final', 2, 0, ${match.participant1_id}, ${match.participant2_id},
+                  'pending_participants', 0, '[]', ${new Date().toISOString()})
+        `;
+        // The reset participant who lost game 1 is not actually eliminated yet.
+        await db`UPDATE participants SET eliminated = 0 WHERE id = ${loserId}`;
+        await tryResolveMatch(db, resetId);
+      } else {
+        await db`UPDATE brackets SET status = 'completed' WHERE id = ${match.bracket_id}`;
+      }
     } else {
-      db.prepare("UPDATE brackets SET status = 'completed' WHERE id = ?").run(match.bracket_id);
+      await advanceFrom(db, matchId, winnerId, match.bracket_side === "winners" ? loserId : null);
+      if (match.bracket_side === "winners" && !match.next_match_winner_id) {
+        // Single-elimination final, or (in double-elim) this can't happen
+        // since the WB final always feeds the grand final.
+        await db`UPDATE brackets SET status = 'completed' WHERE id = ${match.bracket_id}`;
+      }
     }
-  } else {
-    advanceFrom(matchId, winnerId, match.bracket_side === "winners" ? loserId : null);
-    if (match.bracket_side === "winners" && !match.next_match_winner_id) {
-      // Single-elimination final, or (in double-elim) this can't happen
-      // since the WB final always feeds the grand final.
-      db.prepare("UPDATE brackets SET status = 'completed' WHERE id = ?").run(match.bracket_id);
-    }
-  }
 
-  return getBracketDTO(match.bracket_id)!;
+    return (await getBracketDTO(match.bracket_id, db))!;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -394,66 +395,67 @@ export function requestReschedule(
   matchId: string,
   participantId: string,
   options: { adminOverride?: boolean; customDateTime?: string } = {},
-): RescheduleResult {
-  const match = getMatchRow(matchId);
-  if (!match) return { ok: false, reason: "not_found" };
-  if (match.status === "completed") return { ok: false, reason: "already_completed" };
-  if (!match.participant1_id || !match.participant2_id) return { ok: false, reason: "incomplete_match" };
-  if (
-    !options.adminOverride &&
-    match.participant1_id !== participantId &&
-    match.participant2_id !== participantId
-  ) {
-    return { ok: false, reason: "not_a_participant" };
-  }
+): Promise<RescheduleResult> {
+  return getSql().begin(async (db): Promise<RescheduleResult> => {
+    const match = await getMatchRow(db, matchId);
+    if (!match) return { ok: false, reason: "not_found" };
+    if (match.status === "completed") return { ok: false, reason: "already_completed" };
+    if (!match.participant1_id || !match.participant2_id) return { ok: false, reason: "incomplete_match" };
+    if (
+      !options.adminOverride &&
+      match.participant1_id !== participantId &&
+      match.participant2_id !== participantId
+    ) {
+      return { ok: false, reason: "not_a_participant" };
+    }
 
-  const requester = getParticipantRow(participantId) ?? getParticipantRow(match.participant1_id)!;
-  if (!options.adminOverride && requester.reschedule_count >= MAX_RESCHEDULES) {
-    return { ok: false, reason: "limit_reached" };
-  }
+    const requester =
+      (await getParticipantRow(db, participantId)) ?? (await getParticipantRow(db, match.participant1_id))!;
+    if (!options.adminOverride && requester.reschedule_count >= MAX_RESCHEDULES) {
+      return { ok: false, reason: "limit_reached" };
+    }
 
-  const otherId = match.participant1_id === requester.id ? match.participant2_id : match.participant1_id;
-  const other = getParticipantRow(otherId)!;
+    const otherId = match.participant1_id === requester.id ? match.participant2_id : match.participant1_id;
+    const other = (await getParticipantRow(db, otherId))!;
 
-  const db = getDb();
-  let usedSlot: OverlapSlot | null = null;
-  let scheduledAtIso: string;
+    let usedSlot: OverlapSlot | null = null;
+    let scheduledAtIso: string;
 
-  if (options.customDateTime) {
-    scheduledAtIso = new Date(options.customDateTime).toISOString();
-  } else {
-    const triedSlots: OverlapSlot[] = JSON.parse(match.tried_slots_json);
-    const blocksRequester: AvailabilityBlock[] = JSON.parse(requester.availability_json);
-    const blocksOther: AvailabilityBlock[] = JSON.parse(other.availability_json);
-    const slot = findEarliestOverlap(FULL_WEEK_ORDER, blocksRequester, blocksOther, triedSlots);
-    if (!slot) return { ok: false, reason: "no_slot_available" };
-    usedSlot = slot;
-    scheduledAtIso = nextCalendarDateTime(slot.day, slot.hour);
-  }
+    if (options.customDateTime) {
+      scheduledAtIso = new Date(options.customDateTime).toISOString();
+    } else {
+      const triedSlots: OverlapSlot[] = JSON.parse(match.tried_slots_json);
+      const blocksRequester: AvailabilityBlock[] = JSON.parse(requester.availability_json);
+      const blocksOther: AvailabilityBlock[] = JSON.parse(other.availability_json);
+      const slot = findEarliestOverlap(FULL_WEEK_ORDER, blocksRequester, blocksOther, triedSlots);
+      if (!slot) return { ok: false, reason: "no_slot_available" };
+      usedSlot = slot;
+      scheduledAtIso = nextCalendarDateTime(slot.day, slot.hour);
+    }
 
-  db.prepare("UPDATE bracket_matches SET status = 'scheduled', scheduled_at = ? WHERE id = ?").run(
-    scheduledAtIso,
-    matchId,
-  );
-  if (usedSlot) {
-    const tried: OverlapSlot[] = JSON.parse(match.tried_slots_json);
-    tried.push(usedSlot);
-    db.prepare("UPDATE bracket_matches SET tried_slots_json = ? WHERE id = ?").run(JSON.stringify(tried), matchId);
-  }
-  if (!options.adminOverride) {
-    db.prepare("UPDATE participants SET reschedule_count = reschedule_count + 1 WHERE id = ?").run(requester.id);
-  }
+    await db`UPDATE bracket_matches SET status = 'scheduled', scheduled_at = ${scheduledAtIso} WHERE id = ${matchId}`;
+    if (usedSlot) {
+      const tried: OverlapSlot[] = JSON.parse(match.tried_slots_json);
+      tried.push(usedSlot);
+      await db`UPDATE bracket_matches SET tried_slots_json = ${JSON.stringify(tried)} WHERE id = ${matchId}`;
+    }
+    if (!options.adminOverride) {
+      await db`UPDATE participants SET reschedule_count = reschedule_count + 1 WHERE id = ${requester.id}`;
+    }
 
-  return { ok: true, bracket: getBracketDTO(match.bracket_id)! };
+    return { ok: true, bracket: (await getBracketDTO(match.bracket_id, db))! };
+  });
 }
 
-export function adminSetSchedule(matchId: string, isoDateTime: string): BracketDTO {
-  const match = getMatchRow(matchId);
+export async function adminSetSchedule(matchId: string, isoDateTime: string): Promise<BracketDTO> {
+  const db = getSql();
+  const match = await getMatchRow(db, matchId);
   if (!match) throw new Error("Match not found.");
-  getDb()
-    .prepare("UPDATE bracket_matches SET status = 'scheduled', scheduled_at = ? WHERE id = ?")
-    .run(new Date(isoDateTime).toISOString(), matchId);
-  return getBracketDTO(match.bracket_id)!;
+  await db`
+    UPDATE bracket_matches SET status = 'scheduled', scheduled_at = ${new Date(isoDateTime).toISOString()}
+    WHERE id = ${matchId}
+  `;
+  return (await getBracketDTO(match.bracket_id, db))!;
 }
 
 // ---------------------------------------------------------------------------
@@ -473,24 +475,22 @@ function toParticipantDTO(row: ParticipantRow, members: ParticipantMemberRow[]):
   };
 }
 
-export function getBracketDTO(bracketId: string): BracketDTO | null {
-  const db = getDb();
-  const bracket = getBracketRow(bracketId);
+/** Pass `db` to read inside an open transaction (so it sees that transaction's writes). */
+export async function getBracketDTO(bracketId: string, db: Db = getSql()): Promise<BracketDTO | null> {
+  const bracket = await getBracketRow(db, bracketId);
   if (!bracket) return null;
 
-  const participantRows = db
-    .prepare("SELECT * FROM participants WHERE bracket_id = ? ORDER BY seed ASC")
-    .all(bracketId) as ParticipantRow[];
-  const memberRows = db
-    .prepare(
-      `SELECT participant_members.* FROM participant_members
-       JOIN participants ON participants.id = participant_members.participant_id
-       WHERE participants.bracket_id = ?`,
-    )
-    .all(bracketId) as ParticipantMemberRow[];
-  const matchRows = db
-    .prepare("SELECT * FROM bracket_matches WHERE bracket_id = ? ORDER BY round ASC, slot ASC")
-    .all(bracketId) as MatchRow[];
+  const participantRows = await db<ParticipantRow[]>`
+    SELECT * FROM participants WHERE bracket_id = ${bracketId} ORDER BY seed ASC
+  `;
+  const memberRows = await db<ParticipantMemberRow[]>`
+    SELECT participant_members.* FROM participant_members
+    JOIN participants ON participants.id = participant_members.participant_id
+    WHERE participants.bracket_id = ${bracketId}
+  `;
+  const matchRows = await db<MatchRow[]>`
+    SELECT * FROM bracket_matches WHERE bracket_id = ${bracketId} ORDER BY round ASC, slot ASC
+  `;
 
   const participantById = new Map(participantRows.map((p) => [p.id, toParticipantDTO(p, memberRows)] as const));
 
@@ -541,16 +541,20 @@ export function getBracketDTO(bracketId: string): BracketDTO | null {
   };
 }
 
-export function getBracketForCohort(tournamentId: string, divisionId: string, cohortId: string): BracketDTO | null {
-  const row = getDb()
-    .prepare("SELECT id FROM brackets WHERE tournament_id = ? AND division_id = ? AND cohort_id = ?")
-    .get(tournamentId, divisionId, cohortId) as { id: string } | undefined;
+export async function getBracketForCohort(
+  tournamentId: string,
+  divisionId: string,
+  cohortId: string,
+): Promise<BracketDTO | null> {
+  const [row] = await getSql()<{ id: string }[]>`
+    SELECT id FROM brackets
+    WHERE tournament_id = ${tournamentId} AND division_id = ${divisionId} AND cohort_id = ${cohortId}
+  `;
   return row ? getBracketDTO(row.id) : null;
 }
 
-export function getBracketsForTournament(tournamentId: string): BracketDTO[] {
-  const rows = getDb().prepare("SELECT id FROM brackets WHERE tournament_id = ?").all(tournamentId) as {
-    id: string;
-  }[];
-  return rows.map((r) => getBracketDTO(r.id)!).filter(Boolean);
+export async function getBracketsForTournament(tournamentId: string): Promise<BracketDTO[]> {
+  const rows = await getSql()<{ id: string }[]>`SELECT id FROM brackets WHERE tournament_id = ${tournamentId}`;
+  const brackets = await Promise.all(rows.map((r) => getBracketDTO(r.id)));
+  return brackets.filter((b): b is BracketDTO => b !== null);
 }

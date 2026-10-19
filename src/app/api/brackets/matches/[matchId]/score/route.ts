@@ -3,7 +3,7 @@ import { submitMatchScore } from "@/lib/bracket-engine";
 import { getSessionUserFromRequest } from "@/lib/session";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ matchId: string }> }) {
-  const user = getSessionUserFromRequest(request);
+  const user = await getSessionUserFromRequest(request);
   if (!user) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
 
   const { matchId } = await params;
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   try {
-    const bracket = submitMatchScore(matchId, scoreA, scoreB);
+    const bracket = await submitMatchScore(matchId, scoreA, scoreB);
     return NextResponse.json(bracket);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to submit score.";
