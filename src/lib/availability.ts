@@ -5,6 +5,8 @@ export type AvailabilityKind = "available" | "unavailable";
 
 export interface AvailabilityEntry {
   id: string;
+  /** Rows split from one repeat share this, so "the whole repeat" can find every part of it. */
+  seriesId: string;
   kind: AvailabilityKind;
   /** 0 = Sunday … 6 = Saturday. Set when the entry repeats every week. */
   weekday: number | null;
@@ -20,7 +22,7 @@ export interface AvailabilityEntry {
   endTime: string;
 }
 
-export type NewAvailabilityEntry = Omit<AvailabilityEntry, "id">;
+export type NewAvailabilityEntry = Omit<AvailabilityEntry, "id" | "seriesId">;
 
 export interface TimeRange {
   startTime: string;
@@ -132,6 +134,10 @@ function reaches(set: DateSet, date: string): boolean {
   return "date" in set ? set.date >= date : set.endDate === null || set.endDate >= date;
 }
 
+function entryOn(kind: AvailabilityKind, days: DateSet, times: TimeRange): NewAvailabilityEntry {
+  return { kind, ...dateFieldsOf(days), startTime: times.startTime, endTime: times.endTime };
+}
+
 // Zero-padded "HH:MM" strings compare correctly as plain strings too.
 function timesOverlap(a: TimeRange, b: TimeRange): boolean {
   return a.startTime < b.endTime && b.startTime < a.endTime;
@@ -228,33 +234,32 @@ export function findConflicts(
  * What's left of `old` once `cut` takes over the days and times they share:
  * `old` unchanged on its other days, plus whatever of its time `cut` doesn't
  * cover on the shared days. A weekly entry splits around the shared dates.
+ * Pieces with no day on or after `fromDate` are dropped — nobody could see
+ * them in the calendar, and the past doesn't matter for matching.
  */
-export function carveOut(old: NewAvailabilityEntry, cut: NewAvailabilityEntry): NewAvailabilityEntry[] {
+export function carveOut(old: NewAvailabilityEntry, cut: NewAvailabilityEntry, fromDate: string): NewAvailabilityEntry[] {
   const oldDays = dateSetOf(old);
   const shared = intersectDateSets(oldDays, dateSetOf(cut));
   if (!shared || !timesOverlap(old, cut)) return [old];
 
-  const piece = (days: DateSet, times: TimeRange): NewAvailabilityEntry => ({
-    kind: old.kind,
-    ...dateFieldsOf(days),
-    startTime: times.startTime,
-    endTime: times.endTime,
-  });
-  return [
-    ...subtractDateSet(oldDays, shared).map((days) => piece(days, old)),
-    ...subtractTime(old, cut).map((times) => piece(shared, times)),
+  const pieces: [DateSet, TimeRange][] = [
+    ...subtractDateSet(oldDays, shared).map((days): [DateSet, TimeRange] => [days, old]),
+    ...subtractTime(old, cut).map((times): [DateSet, TimeRange] => [shared, times]),
   ];
+  return pieces.filter(([days]) => reaches(days, fromDate)).map(([days, times]) => entryOn(old.kind, days, times));
 }
 
 /**
  * What's left of `entry` once its days from `from` to `to` (inclusive; null is
- * open-ended) are removed — a repeat splits around the gap. Returns null when
- * none of its days fall in that range, so there's nothing to remove.
+ * open-ended) are removed — a repeat splits around the gap. Like carveOut,
+ * parts with no day on or after `fromDate` are dropped. Returns null when none
+ * of its days fall in that range, so there's nothing to remove.
  */
 export function removeDays(
   entry: NewAvailabilityEntry,
   from: string | null,
   to: string | null,
+  fromDate: string,
 ): NewAvailabilityEntry[] | null {
   const days = dateSetOf(entry);
   const removed =
@@ -264,12 +269,9 @@ export function removeDays(
         : null
       : intersectDateSets(days, { weekday: days.weekday, startDate: from, endDate: to });
   if (!removed) return null;
-  return subtractDateSet(days, removed).map((left) => ({
-    kind: entry.kind,
-    ...dateFieldsOf(left),
-    startTime: entry.startTime,
-    endTime: entry.endTime,
-  }));
+  return subtractDateSet(days, removed)
+    .filter((left) => reaches(left, fromDate))
+    .map((left) => entryOn(entry.kind, left, entry));
 }
 
 function toMinutes(time: string): number {

@@ -15,7 +15,12 @@ import {
   type AvailabilityKind,
   type NewAvailabilityEntry,
 } from "@/lib/availability";
-import { createAvailabilityRequest, deleteAvailabilityRequest, fetchAvailability } from "@/lib/availability-client";
+import {
+  createAvailabilityRequest,
+  deleteAvailabilityRequest,
+  fetchAvailability,
+  type DeleteTarget,
+} from "@/lib/availability-client";
 import { parseDateOnly, toDateOnly } from "@/lib/format";
 import { FULL_WEEK_ORDER } from "@/lib/overlap";
 
@@ -293,13 +298,13 @@ function DayPanel({ today, date, entries, onReplace }: DayPanelProps) {
     setNotice("Kept your existing times. The new one wasn't saved.");
   }
 
-  async function remove(entryId: string, days?: { from: string | null; to: string | null }) {
+  async function remove(entryId: string, target: DeleteTarget) {
     setDeleteError("");
     setNotice("");
     setClash(null);
     setRemovingId(entryId);
     try {
-      onReplace(await deleteAvailabilityRequest(entryId, days));
+      onReplace(await deleteAvailabilityRequest(entryId, target, today));
       setPendingDelete(null);
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
@@ -312,7 +317,7 @@ function DayPanel({ today, date, entries, onReplace }: DayPanelProps) {
   function handleRemoveClick(entry: AvailabilityEntry) {
     setDeleteError("");
     if (entry.weekday === null) {
-      void remove(entry.id);
+      void remove(entry.id, { series: false });
       return;
     }
     const isOpen = pendingDelete?.entryId === entry.id && pendingDelete.forDate === date;
@@ -320,7 +325,7 @@ function DayPanel({ today, date, entries, onReplace }: DayPanelProps) {
   }
 
   async function confirmDelete(pending: PendingDelete) {
-    if (pending.scope === "all") return remove(pending.entryId);
+    if (pending.scope === "all") return remove(pending.entryId, { series: true });
     if (pending.scope === "day") return remove(pending.entryId, { from: pending.forDate, to: pending.forDate });
     if (!pending.from && !pending.to) {
       setDeleteError("Pick a start date, an end date, or both.");
