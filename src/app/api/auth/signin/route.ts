@@ -1,7 +1,8 @@
+import { authFailure, sessionResponse } from "@/lib/auth-response";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSql } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
-import { createSession, SESSION_COOKIE } from "@/lib/session";
+import { createSession } from "@/lib/session";
 
 interface UserRow {
   id: string;
@@ -12,7 +13,7 @@ interface UserRow {
   zip_code: string;
 }
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
   const password = typeof body?.password === "string" ? body.password : "";
@@ -27,18 +28,19 @@ export async function POST(request: NextRequest) {
   }
 
   const { token, expiresAt } = await createSession(user.id);
-  const response = NextResponse.json({
+  return sessionResponse({
     id: user.id,
     name: user.name,
     email: user.email,
     skillLevel: user.skill_level,
     zipCode: user.zip_code,
-  });
-  response.cookies.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    expires: new Date(expiresAt),
-  });
-  return response;
+  }, token, expiresAt);
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    return await handlePost(request);
+  } catch (error) {
+    return authFailure(error);
+  }
 }

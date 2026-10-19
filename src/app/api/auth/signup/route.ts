@@ -1,13 +1,14 @@
+import { authFailure, sessionResponse } from "@/lib/auth-response";
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSql } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
-import { createSession, SESSION_COOKIE } from "@/lib/session";
+import { createSession } from "@/lib/session";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ZIP_PATTERN = /^\d{5}(-\d{4})?$/;
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const body = await request.json().catch(() => null);
   if (!body) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
@@ -42,19 +43,24 @@ export async function POST(request: NextRequest) {
   const passwordHash = hashPassword(password);
   const validSkill = Number.isFinite(skillLevel) && skillLevel >= 1 && skillLevel <= 6 ? skillLevel : 3.5;
 
-  await sql`
-    INSERT INTO users (id, name, email, password_hash, skill_level, zip_code, created_at)
-    VALUES (${id}, ${name}, ${email}, ${passwordHash}, ${validSkill}, ${zipCode}, ${new Date().toISOString()})
-  `;
-
-  const { token, expiresAt } = await createSession(id);
-
-  const response = NextResponse.json({ id, name, email, skillLevel: validSkill, zipCode });
-  response.cookies.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    expires: new Date(expiresAt),
+  const { token, expiresAt } = await sql.begin(async (tx) => {
+    await tx`
+      INSERT INTO users (id, name, email, password_hash, skill_level, zip_code, created_at)
+      VALUES (${id}, ${name}, ${email}, ${passwordHash}, ${validSkill}, ${zipCode}, ${new Date().toISOString()})
+    `;
+    return createSession(id, tx);
   });
-  return response;
+
+  return sessionResponse({ id, name, email, skillLevel: validSkill, zipCode }, token, expiresAt);
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    return await handlePost(request);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "23505") {
+      return NextResponse.json({ error: "An account with that email already exists." }, { status: 409 });
+    }
+    return authFailure(error);
+  }
 }

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
 
-const CHROME_LESS_PATHS = ["/signin", "/signup", "/forgot-password"];
+const CHROME_LESS_PATHS = ["/", "/signin", "/signup", "/forgot-password"];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);

@@ -27,20 +27,45 @@ export function TournamentDetail({ id }: { id: string }) {
       <div className="mx-auto max-w-2xl rounded-2xl border border-dashed border-zinc-300 bg-white p-12 text-center">
         <p className="text-sm text-zinc-500">This tournament could not be found.</p>
         <Link
-          href="/tournaments"
+          href="/#tournaments"
           className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600 hover:text-emerald-700"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to Tournaments
+          <ArrowLeft className="h-4 w-4" /> Back to Home
         </Link>
       </div>
     );
   }
 
   if (!user) {
-    return <div className="mx-auto max-w-3xl text-sm text-zinc-500">Loading…</div>;
+    return (
+      <div className="mx-auto flex max-w-3xl flex-col gap-6">
+        <Link href="/#tournaments" className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700">
+          <ArrowLeft size={16} /> Back to Home
+        </Link>
+        <TournamentHero tournament={tournament} />
+        <TournamentDetailsSections tournament={tournament} />
+        <TournamentContact tournament={tournament} />
+      </div>
+    );
   }
 
   return <TournamentDetailContent id={id} tournament={tournament} user={user} />;
+}
+
+function TournamentContact({ tournament }: { tournament: Tournament }) {
+  return (
+    <Card title="Tournament Information">
+      <dl className="flex flex-col gap-3 text-sm">
+        <Row label="Venue" value={`${tournament.venue}, ${tournament.city}`} />
+        <Row label="Format" value={tournament.format} />
+        <Row label="Registration deadline" value={formatDate(tournament.registrationDeadline)} />
+        <Row label="Organizer" value={tournament.organizer} />
+      </dl>
+      <a href={`mailto:${tournament.organizerEmail}`} className="mt-4 inline-flex items-center gap-2 break-all text-sm text-emerald-700">
+        <Mail size={16} />{tournament.organizerEmail}
+      </a>
+    </Card>
+  );
 }
 
 function TournamentDetailContent({
@@ -77,6 +102,9 @@ function TournamentDetailContent({
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link href="/#tournaments" className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700">
+          <ArrowLeft className="h-4 w-4" /> Back to Home
+        </Link>
         <Link
           href="/tournaments"
           className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-zinc-500 hover:text-zinc-900"
@@ -92,6 +120,7 @@ function TournamentDetailContent({
       </div>
 
       <TournamentHero tournament={tournament} />
+      <TournamentContact tournament={tournament} />
 
       <Card title={registration ? "You're Registered" : "Reserve Your Spot"} accent>
         {registration ? (
