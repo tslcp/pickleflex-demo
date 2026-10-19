@@ -1,4 +1,4 @@
-import { LayoutDashboard, Search, ShieldCheck, Trophy, type LucideIcon } from "lucide-react";
+import { CalendarDays, LayoutDashboard, Search, ShieldCheck, Trophy, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -15,6 +15,13 @@ export const NAV_ITEMS: NavItem[] = [
     description: "Your matches & stats",
     icon: LayoutDashboard,
     isActive: (pathname) => pathname === "/",
+  },
+  {
+    href: "/availability",
+    label: "My Availability",
+    description: "When you can play",
+    icon: CalendarDays,
+    isActive: (pathname) => pathname.startsWith("/availability"),
   },
   {
     href: "/tournaments",
