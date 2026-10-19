@@ -1,7 +1,8 @@
+import { authFailure } from "@/lib/auth-response";
 import { NextResponse, type NextRequest } from "next/server";
 import { getUserBySessionToken, SESSION_COOKIE } from "@/lib/session";
 
-export async function GET(request: NextRequest) {
+async function handleRequest(request: NextRequest) {
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   if (!token) {
     return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
@@ -18,4 +19,14 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json(user);
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const response = await handleRequest(request);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  } catch (error) {
+    return authFailure(error);
+  }
 }

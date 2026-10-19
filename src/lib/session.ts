@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
-import { getSql } from "@/lib/db";
+import { getSql, type Db } from "@/lib/db";
 
 export const SESSION_COOKIE = "session_token";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -13,11 +13,11 @@ export interface SessionUser {
   zipCode: string;
 }
 
-export async function createSession(userId: string): Promise<{ token: string; expiresAt: string }> {
+export async function createSession(userId: string, sql: Db = getSql()): Promise<{ token: string; expiresAt: string }> {
   const token = randomUUID();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
-  await getSql()`
+  await sql`
     INSERT INTO sessions (id, user_id, created_at, expires_at)
     VALUES (${token}, ${userId}, ${now.toISOString()}, ${expiresAt.toISOString()})
   `;

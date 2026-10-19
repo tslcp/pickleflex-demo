@@ -20,6 +20,9 @@ export function getSql(): postgres.Sql {
       throw new Error("DATABASE_URL is not set. Add your Supabase connection string to .env.");
     }
     globalThis.__pickleflexSql = postgres(url, {
+      ssl: "require",
+      connect_timeout: 10,
+      max: 5,
       // Supabase's transaction pooler (port 6543) doesn't support prepared statements.
       prepare: false,
       // better-sqlite3 bound undefined as NULL; postgres.js throws on it instead.
