@@ -23,4 +23,39 @@ body {
 @media(max-width:850px){.pf-header{padding:20px 5%;gap:20px;flex-wrap:wrap}.pf-header nav{gap:20px;font-size:12px;order:3;width:100%;justify-content:center}.pf-login{margin-left:auto}.pf-hero{padding:40px 5%;gap:25px}.pf-hero h1{letter-spacing:-3px;font-size:57px}.pf-court-art{min-height:450px}.pf-paddle{left:15%;width:135px;height:180px}.pf-paddle:after{left:44px;top:167px}.pf-ball{right:8%}.pf-art-sticker{width:83px;height:83px;font-size:11px}.pf-tournaments{gap:35px;padding:55px 5%;grid-template-columns:.8fr 1.2fr}.pf-tournament-details{font-size:9px}.pf-tournament-bubble{padding:17px}.pf-tournament-title{font-size:17px}.pf-control-hint{display:none}.pf-ticker{justify-content:flex-start;gap:30px}.pf-community{padding:40px 5%;gap:30px}.pf-contact{padding:45px 5%;gap:25px}}
 @media(max-width:600px){.pf-brand{font-size:24px}.pf-hero{grid-template-columns:1fr;gap:35px}.pf-hero h1{font-size:66px}.pf-hero-copy{padding-top:8px}.pf-court-art{min-height:390px}.pf-paddle{left:29%;top:18%}.pf-ball{right:18%;top:55%}.pf-hero-foot{margin-top:22px}.pf-tournaments{grid-template-columns:1fr;gap:35px}.pf-section-intro>p:not(.pf-eyebrow){max-width:100%}.pf-note{margin-top:22px}.pf-home h2{font-size:39px}.pf-tournament-bubble{padding:18px}.pf-tournament-title{font-size:19px}.pf-community,.pf-contact{grid-template-columns:1fr;gap:10px}.pf-community>div{max-width:none}.pf-community .pf-text-link{margin-top:18px}.pf-shop{flex-wrap:wrap;gap:12px}.pf-shop p{order:3;width:100%}.pf-footer{flex-wrap:wrap}.pf-footer>span:first-of-type{display:none}.pf-footer .pf-brand{width:100%}.pf-contact a{font-size:23px}}
 @media(prefers-reduced-motion:reduce){.pf-tournament-track{transition:none}}
+
+/* Authentication shares the public homepage palette and court illustration. */
+.pf-auth{min-height:100vh;display:flex;flex-direction:column}
+.pf-auth .pf-header{width:100%}
+.pf-auth .pf-login{margin-left:auto}
+.pf-auth-main{width:100%;max-width:1240px;margin:auto;display:grid;grid-template-columns:1fr 1fr;gap:clamp(40px,7vw,110px);padding:52px 6%}
+.pf-auth-story{align-self:start;position:sticky;top:40px}
+.pf-auth-story h2{font-size:clamp(44px,4.8vw,66px);line-height:1.05;letter-spacing:-3px;margin:24px 0}
+.pf-auth-art{min-height:290px;margin-top:30px;border-radius:10px}
+.pf-auth-art .pf-paddle{width:100px;height:130px;left:28%;top:22%;border-width:5px}
+.pf-auth-art .pf-paddle span{font-size:42px;left:22px;top:28px;letter-spacing:-4px}
+.pf-auth-art .pf-paddle:after{width:25px;height:65px;left:32px;top:120px}
+.pf-auth-art .pf-ball{width:70px;height:70px;top:54%;right:20%}
+.pf-auth-art .pf-ball i{transform:scale(.7);transform-origin:top left}
+.pf-auth-art .pf-ball i:nth-child(2){left:47px}.pf-auth-art .pf-ball i:nth-child(5){left:46px;top:49px}
+.pf-auth-panel{min-width:0;align-self:center}
+.pf-auth-card{background:#fffef7;border:1px solid #dce1ce;border-radius:14px;padding:32px}
+.pf-auth-title{font-size:30px;font-weight:600;letter-spacing:-1px;line-height:1.2}
+.pf-auth-description{font-size:14px;line-height:1.7;color:#697365;margin-top:9px}
+.pf-auth-label{font-weight:600;color:var(--pf-ink);font-size:12px}
+.pf-auth-input{width:100%;min-height:46px;border:1px solid #cdd4c2;border-radius:5px;background:#fffefb;padding:11px 13px;font-size:14px;color:var(--pf-ink)}
+.pf-auth-input:focus{border-color:#718a40;outline:2px solid #deef8a;outline-offset:2px}
+.pf-auth .pf-auth-submit{width:100%;justify-content:center;margin-top:6px;cursor:pointer;min-height:48px}
+.pf-auth-submit:disabled{opacity:.5;cursor:wait}
+.pf-auth-switch{text-align:center;font-size:13px;color:#697365;margin-top:22px;line-height:1.7}
+.pf-auth-switch-secondary{margin-top:8px}
+.pf-auth-providers{display:flex;flex-direction:column;gap:11px;margin-top:25px}
+.pf-auth-provider{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;min-height:47px;border:1px solid #cdd4c2;border-radius:5px;background:#fffefb;padding:10px 14px;font-size:13px;font-weight:600;color:var(--pf-ink)}
+.pf-auth-provider:hover{background:#f0f3e4;border-color:#718a40}
+.pf-auth-provider-soon,.pf-auth-provider-soon:hover{border-style:dashed;background:transparent;color:#697365;border-color:#dce1ce;font-weight:400;cursor:not-allowed;font-size:12px}
+.pf-auth-divider{display:flex;align-items:center;gap:12px;margin-top:9px;font-size:11px;color:#697365}
+.pf-auth-divider span{height:1px;flex:1;background:#dce1ce}
+.pf-auth-footer{width:100%;max-width:1440px;margin:0 auto;padding:22px 6%;border-top:1px solid #183c3020;display:flex;justify-content:space-between;gap:20px;font-size:11px;color:#697365}
+@media(max-width:800px){.pf-auth-main{gap:30px;padding:35px 5%}.pf-auth-card{padding:24px}.pf-auth-story h2{font-size:45px}.pf-auth-art{min-height:270px}}
+@media(max-width:600px){.pf-auth-main{grid-template-columns:1fr;gap:28px;padding:30px 5% 40px;max-width:480px}.pf-auth-story{position:static}.pf-auth-story h2{font-size:42px;margin:18px 0;letter-spacing:-2px}.pf-auth-story .pf-intro{font-size:13px}.pf-auth-art{display:none}.pf-auth .pf-header{gap:12px;padding:20px 5%}.pf-auth .pf-login{font-size:11px;gap:6px;padding:10px}.pf-auth-footer{font-size:10px;padding:20px 5%}.pf-auth-title{font-size:27px}}
 .pf-tournament-bubble{cursor:pointer;transition:border-color .2s,background-color .2s}.pf-tournament-bubble:hover,.pf-tournament-bubble:focus-visible{border-color:#789040;background:#f1f4e5}.pf-home .pf-tournament-bubble:focus-visible{outline-offset:-4px}
