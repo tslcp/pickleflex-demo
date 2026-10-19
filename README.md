@@ -55,12 +55,15 @@ play, for matching you with other players later:
 - Deleting (×) a one-off time removes it straight away. For a repeating time
   you choose: **Only** the selected day, the **whole repeat**, or **Choose
   days** (a From/Until range; blank Until = from then on). The rest of the
-  repeat is kept around whatever you remove.
+  repeat is kept around whatever you remove, and still counts as one repeat:
+  **whole repeat** later removes every part of it. Leftover parts that would
+  only cover past dates aren't kept.
 - Any leftover overlap (e.g. from before this check existed) still resolves
   with "can't play" winning, and the day shows what's left as **Free to play**.
 - Saved in Supabase (`availability` table). Create it once by running
-  `sql/availability.sql` in the Supabase SQL editor (a database created
-  before repeat dates existed also needs `sql/availability-repeat-range.sql`).
+  `sql/availability.sql` in the Supabase SQL editor. A table created from an
+  older version also needs, in order, `sql/availability-repeat-range.sql`
+  and `sql/availability-series.sql`.
 
 ### Admin view
 Go to **Admin Panel** in the sidebar — this is where most of the interesting

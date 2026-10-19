@@ -28,17 +28,21 @@ export async function createAvailabilityRequest(
   return { entries: data };
 }
 
-/**
- * Deletes an entry — or, given `days`, only a repeat's days in that inclusive
- * range (a null bound is open-ended). Resolves to the updated list.
- */
+/** Which part of an entry to delete: just that row, its whole repeat, or the repeat's days in a range. */
+export type DeleteTarget = { series: boolean } | { from: string | null; to: string | null };
+
+/** Resolves to the updated list. `today` lets the server drop leftover parts that only cover the past. */
 export async function deleteAvailabilityRequest(
   entryId: string,
-  days?: { from: string | null; to: string | null },
+  target: DeleteTarget,
+  today: string,
 ): Promise<AvailabilityEntry[]> {
-  const query = new URLSearchParams();
-  if (days?.from) query.set("from", days.from);
-  if (days?.to) query.set("to", days.to);
-  const search = query.toString() ? `?${query}` : "";
-  return handle(await fetch(`/api/availability/${encodeURIComponent(entryId)}${search}`, { method: "DELETE" }));
+  const query = new URLSearchParams({ today });
+  if ("series" in target) {
+    if (target.series) query.set("series", "1");
+  } else {
+    if (target.from) query.set("from", target.from);
+    if (target.to) query.set("to", target.to);
+  }
+  return handle(await fetch(`/api/availability/${encodeURIComponent(entryId)}?${query}`, { method: "DELETE" }));
 }

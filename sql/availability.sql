@@ -5,6 +5,8 @@
 
 CREATE TABLE availability (
   id text PRIMARY KEY,
+  -- Rows split from one entry share this; an entry never split is its own series (= its id).
+  series_id text NOT NULL,
   user_id text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   kind text NOT NULL CHECK (kind IN ('available', 'unavailable')),
   -- Exactly one of these is set: weekday repeats every week
@@ -27,5 +29,6 @@ CREATE TABLE availability (
 );
 
 CREATE INDEX availability_user_id_idx ON availability (user_id);
+CREATE INDEX availability_user_series_idx ON availability (user_id, series_id);
 
 ALTER TABLE availability ENABLE ROW LEVEL SECURITY;

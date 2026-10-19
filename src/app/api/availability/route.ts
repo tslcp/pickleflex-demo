@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
   await sql.begin(async (db) => {
     for (const old of conflicts) {
       await deleteEntry(db, user.id, old.id);
-      for (const piece of carveOut(old, parsed)) await insertEntry(db, user.id, piece);
+      for (const piece of carveOut(old, parsed, today)) await insertEntry(db, user.id, piece, old.seriesId);
     }
     await insertEntry(db, user.id, parsed);
   });
