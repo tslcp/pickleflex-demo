@@ -20,3 +20,14 @@ CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON public.sessions(expires_at
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.users, public.sessions FROM anon, authenticated;
+
+-- Stable provider subjects allow additional login providers without changing users.
+CREATE TABLE IF NOT EXISTS public.auth_identities (
+  provider TEXT NOT NULL,
+  provider_subject TEXT NOT NULL,
+  user_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  PRIMARY KEY (provider, provider_subject),
+  UNIQUE (user_id, provider)
+);
+ALTER TABLE public.auth_identities ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.auth_identities FROM anon, authenticated;

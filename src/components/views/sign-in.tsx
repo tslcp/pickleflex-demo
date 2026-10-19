@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CircleDot } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { AuthProviders } from "@/components/auth-providers";
 
 const inputClass =
   "w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500";
@@ -58,6 +59,7 @@ export function SignIn() {
           <h1 className="text-lg font-semibold text-zinc-900">Welcome back</h1>
           <p className="mt-1 text-sm text-zinc-500">Sign in to manage your matches and tournaments.</p>
 
+          <AuthProviders />
           <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
             <label className="flex flex-col gap-1.5 text-sm">
               <span className="font-medium text-zinc-700">Email</span>
