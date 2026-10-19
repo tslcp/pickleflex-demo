@@ -10,11 +10,11 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   {
-    href: "/",
+    href: "/dashboard",
     label: "Player Dashboard",
     description: "Your matches & stats",
     icon: LayoutDashboard,
-    isActive: (pathname) => pathname === "/",
+    isActive: (pathname) => pathname === "/dashboard",
   },
   {
     href: "/tournaments",
