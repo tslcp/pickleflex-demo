@@ -3,7 +3,7 @@ import { requestReschedule } from "@/lib/bracket-engine";
 import { getSessionUserFromRequest } from "@/lib/session";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ matchId: string }> }) {
-  const user = getSessionUserFromRequest(request);
+  const user = await getSessionUserFromRequest(request);
   if (!user) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
 
   const { matchId } = await params;
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "participantId is required." }, { status: 400 });
   }
 
-  const result = requestReschedule(matchId, participantId, { adminOverride, customDateTime });
+  const result = await requestReschedule(matchId, participantId, { adminOverride, customDateTime });
   if (!result.ok) {
     const messages: Record<string, string> = {
       not_found: "Match not found.",

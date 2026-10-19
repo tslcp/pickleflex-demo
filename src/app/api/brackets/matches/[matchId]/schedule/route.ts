@@ -3,7 +3,7 @@ import { adminSetSchedule } from "@/lib/bracket-engine";
 import { getSessionUserFromRequest } from "@/lib/session";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ matchId: string }> }) {
-  const user = getSessionUserFromRequest(request);
+  const user = await getSessionUserFromRequest(request);
   if (!user) return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
 
   const { matchId } = await params;
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!dateTime) return NextResponse.json({ error: "dateTime is required." }, { status: 400 });
 
   try {
-    const bracket = adminSetSchedule(matchId, dateTime);
+    const bracket = await adminSetSchedule(matchId, dateTime);
     return NextResponse.json(bracket);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to set match time.";
