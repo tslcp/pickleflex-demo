@@ -39,6 +39,29 @@ password (8+ characters). You'll be signed in automatically afterward.
     toggle/links on the tournament page for the "all-in-one" single-page
     version vs. the "wizard" pop-up version.
 
+### My Availability
+Go to **My Availability** in the sidebar to record when you can (or can't)
+play, for matching you with other players later:
+
+- Pick a date on the mini calendar, choose **Can play** or **Can't play**,
+  and enter any start/end time, or tick **All day** for a whole day (e.g. a
+  day you can't play at all; it's struck through on the calendar). Tick
+  **Repeat every <weekday>** to make it a weekly entry instead of a one-off,
+  optionally with **Starting** / **Until** dates (blank = every week, no end).
+- If a new "can play" time overlaps an existing "can't play" one (or the
+  other way round), you're asked to **Override** (the overlapping part takes
+  the new value; a weekly entry is split around it) or **Discard** (the new
+  entry isn't saved). Same-kind overlaps just merge.
+- Deleting (×) a one-off time removes it straight away. For a repeating time
+  you choose: **Only** the selected day, the **whole repeat**, or **Choose
+  days** (a From/Until range; blank Until = from then on). The rest of the
+  repeat is kept around whatever you remove.
+- Any leftover overlap (e.g. from before this check existed) still resolves
+  with "can't play" winning, and the day shows what's left as **Free to play**.
+- Saved in Supabase (`availability` table). Create it once by running
+  `sql/availability.sql` in the Supabase SQL editor (a database created
+  before repeat dates existed also needs `sql/availability-repeat-range.sql`).
+
 ### Admin view
 Go to **Admin Panel** in the sidebar — this is where most of the interesting
 mechanics are:
