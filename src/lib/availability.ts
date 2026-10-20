@@ -49,7 +49,7 @@ export function isValidDate(value: string): boolean {
   return DATE_PATTERN.test(value) && toDateOnly(parseDateOnly(value)) === value;
 }
 
-function addDays(date: string, days: number): string {
+export function addDays(date: string, days: number): string {
   const d = parseDateOnly(date);
   return toDateOnly(new Date(d.getFullYear(), d.getMonth(), d.getDate() + days));
 }
@@ -274,12 +274,12 @@ export function removeDays(
     .map((left) => entryOn(entry.kind, left, entry));
 }
 
-function toMinutes(time: string): number {
+export function toMinutes(time: string): number {
   const [hour, minute] = time.split(":").map(Number);
   return hour * 60 + minute;
 }
 
-function fromMinutes(total: number): string {
+export function fromMinutes(total: number): string {
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 

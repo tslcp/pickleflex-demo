@@ -43,9 +43,16 @@ password (8+ characters). You'll be signed in automatically afterward.
 Go to **My Availability** in the sidebar to record when you can (or can't)
 play, for matching you with other players later:
 
-- Pick a date on the mini calendar, choose **Can play** or **Can't play**,
-  and enter any start/end time, or tick **All day** for a whole day (e.g. a
-  day you can't play at all; it's struck through on the calendar). Tick
+- The calendar works like Google Calendar: a **Month** view with your times
+  as chips in each day, and a **Week** view with them as blocks on an hourly
+  grid (switch with the Month / Week toggle; **Today** and the arrows move
+  around). Click a day, a chip, or a block to open that day; in Week view
+  you can also click or drag on the grid to start a time with it filled in.
+  Times of the same kind that touch or overlap (e.g. can't play 5–6 PM and
+  6–7 PM) are drawn as one block; the day popup still lists each entry.
+- In that popup choose **Can play** or **Can't play** and enter any
+  start/end time, or tick **All day** for a whole day (e.g. a day you can't
+  play at all). Tick
   **Repeat every <weekday>** to make it a weekly entry instead of a one-off,
   optionally with **Starting** / **Until** dates (blank = every week, no end).
 - If a new "can play" time overlaps an existing "can't play" one (or the
